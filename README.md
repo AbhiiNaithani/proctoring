@@ -10,11 +10,14 @@
    - **Windows**:
      ```bash
      python -m venv venv && .\venv\Scripts\activate
+     source venv/Scripts/activate
      ```
 
 2. Install dependencies:
    ```bash
    pip install -r requirements.txt
+
+   pip install opencv-python torch torchvision matplotlib sounddevice mediapipe
    ```
 
 3. Navigate to the source directory:
