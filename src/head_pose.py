@@ -8,33 +8,32 @@ import threading as th
 import sounddevice as sd
 import audio
 
-# place holders and global variables
-x = 0                                       # X axis head pose
-y = 0                                       # Y axis head pose
+# Global variables
+x = 0  # X axis head pose (for primary face)
+y = 0  # Y axis head pose (for primary face)
 
 X_AXIS_CHEAT = 0
 Y_AXIS_CHEAT = 0
+MULTIPLE_FACE_CHEAT = 0
 
 def pose(frame_queue, stop_event):
-    global VOLUME_NORM, x, y, X_AXIS_CHEAT, Y_AXIS_CHEAT
-    #############################
+    global VOLUME_NORM, x, y, X_AXIS_CHEAT, Y_AXIS_CHEAT, MULTIPLE_FACE_CHEAT
+    
     mp_face_mesh = mp.solutions.face_mesh
-    face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-    # cap = cv2.VideoCapture(0)
-
-    # if not cap.isOpened():
-    #     print("❌ Camera not accessible.")
-    #     return
-
+    face_mesh = mp_face_mesh.FaceMesh(
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5,
+        max_num_faces=5  # Increase maximum number of detectable faces
+    )
+    
     mp_drawing = mp.solutions.drawing_utils
-    # mp_drawing_styles = mp.solutions
 
     while not stop_event.is_set():
         if not frame_queue.empty():
             image = frame_queue.get()
             if image is None:
                 print("❌ Failed to grab frame from camera.")
-                continue  # or break, depending on your loop logic
+                continue
 
             # Flip the image horizontally for a later selfie-view display
             # Also convert the color space from BGR to RGB
@@ -53,20 +52,33 @@ def pose(frame_queue, stop_event):
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
             img_h, img_w, img_c = image.shape
-            face_3d = []
-            face_2d = []
             
-            face_ids = [33, 263, 1, 61, 291, 199]
-
+            # Track if we've processed the primary face
+            primary_face_processed = False
+            
             if results.multi_face_landmarks:
-                for face_landmarks in results.multi_face_landmarks:
+                # Update multiple face detection flag
+                MULTIPLE_FACE_CHEAT = 1 if len(results.multi_face_landmarks) > 1 else 0
+                
+                for face_idx, face_landmarks in enumerate(results.multi_face_landmarks):
+                    face_ids = [33, 263, 1, 61, 291, 199]
+                    face_3d = []
+                    face_2d = []
+                    
+                    # Draw landmarks for all faces
                     mp_drawing.draw_landmarks(
                         image=image,
                         landmark_list=face_landmarks,
                         connections=mp_face_mesh.FACEMESH_CONTOURS,
                         landmark_drawing_spec=None)
+                    
+                    # Label each face
+                    cv2.putText(image, f"Face {face_idx+1}", 
+                               (20, 40 + face_idx * 20), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 
+                               0.6, (0, 255, 0), 2)
+                    
                     for idx, lm in enumerate(face_landmarks.landmark):
-                        # print(lm)
                         if idx in face_ids:
                             if idx == 1:
                                 nose_2d = (lm.x * img_w, lm.y * img_h)
@@ -80,73 +92,75 @@ def pose(frame_queue, stop_event):
                             # Get the 3D Coordinates
                             face_3d.append([x, y, lm.z])       
                     
-                    # Convert it to the NumPy array
-                    face_2d = np.array(face_2d, dtype=np.float64)
+                    # Only calculate pose for the primary face (face_idx == 0)
+                    if face_idx == 0 and len(face_2d) > 0 and len(face_3d) > 0:
+                        # Convert to NumPy arrays
+                        face_2d = np.array(face_2d, dtype=np.float64)
+                        face_3d = np.array(face_3d, dtype=np.float64)
 
-                    # Convert it to the NumPy array
-                    face_3d = np.array(face_3d, dtype=np.float64)
+                        # The camera matrix
+                        focal_length = 1 * img_w
+                        cam_matrix = np.array([
+                            [focal_length, 0, img_h / 2],
+                            [0, focal_length, img_w / 2],
+                            [0, 0, 1]
+                        ])
 
-                    # The camera matrix
-                    focal_length = 1 * img_w
+                        # The Distance Matrix
+                        dist_matrix = np.zeros((4, 1), dtype=np.float64)
 
-                    cam_matrix = np.array([ [focal_length, 0, img_h / 2],
-                                            [0, focal_length, img_w / 2],
-                                            [0, 0, 1]])
+                        # Solve PnP
+                        success, rot_vec, trans_vec = cv2.solvePnP(
+                            face_3d, face_2d, cam_matrix, dist_matrix)
 
-                    # The Distance Matrix
-                    dist_matrix = np.zeros((4, 1), dtype=np.float64)
+                        # Get rotational matrix
+                        rmat, jac = cv2.Rodrigues(rot_vec)
 
-                    # Solve PnP
-                    success, rot_vec, trans_vec = cv2.solvePnP(face_3d, face_2d, cam_matrix, dist_matrix)
+                        # Get angles
+                        angles, mtxR, mtxQ, Qx, Qy, Qz = cv2.RQDecomp3x3(rmat)
 
-                    # Get rotational matrix
-                    rmat, jac = cv2.Rodrigues(rot_vec)
+                        # Get the rotation degrees
+                        x = angles[0] * 360
+                        y = angles[1] * 360
 
-                    # Get angles
-                    angles, mtxR, mtxQ, Qx, Qy, Qz = cv2.RQDecomp3x3(rmat)
+                        # Determine head direction
+                        if y < -10:
+                            text = "Looking Left"
+                        elif y > 10:
+                            text = "Looking Right"
+                        elif x < -10:
+                            text = "Looking Down"
+                        else:
+                            text = "Forward"
+                            
+                        text = f"Primary Face: {text} (X:{int(x)} Y:{int(y)})"
+                        
+                        # Update cheat flags for primary face only
+                        if y < -10 or y > 10:
+                            X_AXIS_CHEAT = 1
+                        else:
+                            X_AXIS_CHEAT = 0
 
-                    # Get the y rotation degree
-                    x = angles[0] * 360
-                    y = angles[1] * 360
+                        if x < -5:
+                            Y_AXIS_CHEAT = 1
+                        else:
+                            Y_AXIS_CHEAT = 0
 
-                    # print(y)
-
-                    # See where the user's head tilting
-                    if y < -10:
-                        text = "Looking Left"
-                    elif y > 10:
-                        text = "Looking Right"
-                    elif x < -10:
-                        text = "Looking Down"
-                    else:
-                        text = "Forward"
-                    text = str(int(x)) + "::" + str(int(y)) + text
-                    # print(str(int(x)) + "::" + str(int(y)))
-                    # print("x: {x}   |   y: {y}  |   sound amplitude: {amp}".format(x=int(x), y=int(y), amp=audio.SOUND_AMPLITUDE))
-                    
-                    # Y is left / right
-                    # X is up / down
-                    if y < -10 or y > 10:
-                        X_AXIS_CHEAT = 1
-                    else:
-                        X_AXIS_CHEAT = 0
-
-                    if x < -5:
-                        Y_AXIS_CHEAT = 1
-                    else:
-                        Y_AXIS_CHEAT = 0
-
-                    # print(X_AXIS_CHEAT, Y_AXIS_CHEAT)
-                    # Display the nose direction
-                    nose_3d_projection, jacobian = cv2.projectPoints(nose_3d, rot_vec, trans_vec, cam_matrix, dist_matrix)
-
-                    p1 = (int(nose_2d[0]), int(nose_2d[1]))
-                    p2 = (int(nose_3d_projection[0][0][0]), int(nose_3d_projection[0][0][1]))
-                    
-
-                    # Add the text on the image
-                    cv2.putText(image, text, (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                        # Display the primary face direction
+                        cv2.putText(image, text, (20, 20), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 
+                                   0.7, (0, 0, 255), 2)
+                        
+                        # Mark that we've processed the primary face
+                        primary_face_processed = True
             
+            # If no faces detected, reset flags
+            else:
+                MULTIPLE_FACE_CHEAT = 0
+                X_AXIS_CHEAT = 0
+                Y_AXIS_CHEAT = 0
+            
+            # Display the image
             cv2.imshow('Head Pose Estimation', image)
 
             if cv2.waitKey(5) & 0xFF == 27:
@@ -155,10 +169,7 @@ def pose(frame_queue, stop_event):
 
     cv2.destroyAllWindows()
 
-#############################
 if __name__ == "__main__":
     t1 = th.Thread(target=pose)
-
     t1.start()
-
     t1.join()

@@ -24,6 +24,7 @@ import audio
 import head_pose
 import detection
 import phone_detection
+import combined_view
 import time
 from queue import Queue
 import graph
@@ -55,14 +56,20 @@ def main():
                         pass
                 frame_queue.put(frame.copy())
             time.sleep(0.01)  # Small sleep to prevent CPU overload
+
+    # Start GUI-related function on main thread FIRST
+    detection_thread = threading.Thread(target=detection.run_detection,args=(stop_event,))
+    detection_thread.start()
+
     # Start all components
     threads = [
         threading.Thread(target=frame_capture, daemon=True),
         threading.Thread(target=audio.sound, daemon=True),
-        threading.Thread(target=head_pose.pose, args=(frame_queue, stop_event), daemon=True),
-        threading.Thread(target=phone_detection.detect_phone, args=(frame_queue, stop_event), daemon=True),
+        # threading.Thread(target=head_pose.pose, args=(frame_queue, stop_event), daemon=True),
+        # threading.Thread(target=phone_detection.detect_phone, args=(frame_queue, stop_event), daemon=True),
         threading.Thread(target=detection.run_detection, daemon=True),
-        threading.Thread(target=graph.run_plot, daemon=True)
+        # threading.Thread(target=combined_view.process_combined_view, args=(frame_queue, stop_event), daemon=True),
+        threading.Thread(target=graph.run_plot, args=(stop_event,), daemon=True)
     ]
 
     for t in threads:
@@ -70,10 +77,12 @@ def main():
 
     # Clean exit handling
     try:
-        while True:
-            time.sleep(1)
+        # while detection_thread.is_alive():
+        #     time.sleep(0.5)
+        combined_view.process_combined_view(frame_queue, stop_event)
     except KeyboardInterrupt:
         print("\nShutting down...")
+    finally:
         stop_event.set()
         time.sleep(1)
         cap.release()

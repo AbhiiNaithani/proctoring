@@ -32,7 +32,8 @@ import matplotlib.pyplot as plt
 import time
 from detection import get_score
 
-def run_plot():
+def run_plot(stop_event=None):
+
     plt.ion()
     fig, ax = plt.subplots()
     xdata, ydata = [], []
@@ -46,8 +47,7 @@ def run_plot():
     ax.legend()
 
     start_time = time.time()
-
-    while True:
+    while not (stop_event and stop_event.is_set()):
         current_time = time.time() - start_time
         current_score = get_score()
 
@@ -67,7 +67,7 @@ def run_plot():
         plt.pause(0.2)
 
     plt.ioff()
-    plt.show()
+    plt.close()
 
 if __name__ == '__main__':
     run_plot()

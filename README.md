@@ -9,7 +9,7 @@
      ```
    - **Windows**:
      ```bash
-     python -m venv venv && .\venv\Scripts\activate
+     python -m venv venv
      source venv/Scripts/activate
      ```
 

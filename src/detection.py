@@ -260,6 +260,10 @@ def process():
     
     phone_flag = phone_detection.PHONE_CHEAT
     phone_weight = 0.5 if phone_flag else 0  # Higher base weight for phone detection
+
+    multiple_face_flag = head_pose.MULTIPLE_FACE_CHEAT
+    multiple_face_weight = 0.5 if multiple_face_flag else 0
+
     
     if GLOBAL_CHEAT == 0:
         if head_pose.X_AXIS_CHEAT == 0:
@@ -267,23 +271,23 @@ def process():
                 if audio.AUDIO_CHEAT == 0:
                     PERCENTAGE_CHEAT = avg(phone_weight, PERCENTAGE_CHEAT)
                 else:
-                    PERCENTAGE_CHEAT = avg(0.3 + phone_weight, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.3 + phone_weight + multiple_face_weight, PERCENTAGE_CHEAT)
             else:
                 if audio.AUDIO_CHEAT == 0:
-                    PERCENTAGE_CHEAT = avg(0.3 + phone_weight, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.3 + phone_weight + multiple_face_weight, PERCENTAGE_CHEAT)
                 else:
-                    PERCENTAGE_CHEAT = avg(0.5 + phone_weight, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.5 + phone_weight + multiple_face_weight, PERCENTAGE_CHEAT)
         else:
             if head_pose.Y_AXIS_CHEAT == 0:
                 if audio.AUDIO_CHEAT == 0:
-                    PERCENTAGE_CHEAT = avg(0.2 + phone_weight, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.2 + phone_weight + multiple_face_weight, PERCENTAGE_CHEAT)
                 else:
-                    PERCENTAGE_CHEAT = avg(0.5 + phone_weight, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.5 + phone_weight + multiple_face_weight, PERCENTAGE_CHEAT)
             else:
                 if audio.AUDIO_CHEAT == 0:
-                    PERCENTAGE_CHEAT = avg(0.25 + phone_weight, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.25 + phone_weight + multiple_face_weight, PERCENTAGE_CHEAT)
                 else:
-                    PERCENTAGE_CHEAT = avg(0.35 + phone_weight, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.35 + phone_weight + multiple_face_weight, PERCENTAGE_CHEAT)
     else:
         # When already in cheating state, phone detection has even greater impact
         phone_weight = 0.7 if phone_flag else 0
@@ -293,21 +297,21 @@ def process():
                 if audio.AUDIO_CHEAT == 0:
                     PERCENTAGE_CHEAT = avg(phone_weight, PERCENTAGE_CHEAT)
                 else:
-                    PERCENTAGE_CHEAT = avg(0.6 + phone_weight*0.3, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.6 + phone_weight + multiple_face_weight*0.3, PERCENTAGE_CHEAT)
             else:
                 if audio.AUDIO_CHEAT == 0:
-                    PERCENTAGE_CHEAT = avg(0.6 + phone_weight*0.3, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.6 + phone_weight + multiple_face_weight*0.3, PERCENTAGE_CHEAT)
                 else:
                     PERCENTAGE_CHEAT = avg(0.9, PERCENTAGE_CHEAT)  # Max out when phone + other factors
         else:
             if head_pose.Y_AXIS_CHEAT == 0:
                 if audio.AUDIO_CHEAT == 0:
-                    PERCENTAGE_CHEAT = avg(0.7 + phone_weight*0.2, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.7 + phone_weight + multiple_face_weight*0.2, PERCENTAGE_CHEAT)
                 else:
                     PERCENTAGE_CHEAT = avg(0.9, PERCENTAGE_CHEAT)
             else:
                 if audio.AUDIO_CHEAT == 0:
-                    PERCENTAGE_CHEAT = avg(0.6 + phone_weight*0.3, PERCENTAGE_CHEAT)
+                    PERCENTAGE_CHEAT = avg(0.6 + phone_weight + multiple_face_weight*0.3, PERCENTAGE_CHEAT)
                 else:
                     PERCENTAGE_CHEAT = avg(0.95, PERCENTAGE_CHEAT)  # Near certain cheating
 
@@ -321,7 +325,7 @@ def process():
     GLOBAL_CHEAT = 1 if PERCENTAGE_CHEAT > CHEAT_THRESH else 0
     status = "CHEATING!" if GLOBAL_CHEAT else "Normal"
     print(f"Cheat: {PERCENTAGE_CHEAT:.4f} | Status: {status} | Phone: {'Yes' if phone_flag else 'No'}")
-def run_detection():
+def run_detection(stop_event=None):
     # Initialize plot with clearer settings
     plt.ion()
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -336,7 +340,7 @@ def run_detection():
     fig.canvas.draw()
     
     try:
-        while True:
+        while not (stop_event and stop_event.is_set()):
             process()
             # Update plot
             line.set_ydata(YDATA)
@@ -344,5 +348,8 @@ def run_detection():
             fig.canvas.flush_events()
             plt.pause(0.05)  # 20 updates per second
             
-    except KeyboardInterrupt:
-        plt.close('all')
+    except Exception as e:
+        print(f"Plot loop exited due to exception: {e}")
+    finally:
+        plt.ioff()
+        plt.close()
