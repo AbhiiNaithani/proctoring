@@ -144,7 +144,7 @@ def process_combined_view(frame_queue, stop_event):
                             #     multiple_faces)
                             
                             event_logger.log_event(
-                                frame,
+                                annotated_frame,
                                 looking_left,
                                 looking_right,
                                 looking_up,
