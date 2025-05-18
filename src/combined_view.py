@@ -4,6 +4,36 @@ import numpy as np
 import mediapipe as mp
 import head_pose
 import phone_detection
+import event_logger
+
+
+# def log_events(frame):
+#         # Get current detection states
+#         looking_left = head_pose.y < -10
+#         looking_right = head_pose.y > 10
+#         looking_up = head_pose.x > 5
+#         looking_down = head_pose.x < -5
+#         phone_detected = phone_detection.PHONE_CHEAT
+#         multiple_faces = head_pose.MULTIPLE_FACE_CHEAT
+        
+#         # Log the event
+#         print(
+#             looking_left,
+#             looking_right,
+#             looking_up,
+#             looking_down,
+#             phone_detected,
+#             multiple_faces)
+        
+#         event_logger.log_event(
+#             frame,
+#             looking_left,
+#             looking_right,
+#             looking_up,
+#             looking_down,
+#             phone_detected,
+#             multiple_faces
+#         )
 
 def process_combined_view(frame_queue, stop_event):
     mp_face_mesh = mp.solutions.face_mesh
@@ -86,15 +116,43 @@ def process_combined_view(frame_queue, stop_event):
                             head_pose.Y_AXIS_CHEAT = 1 if x_angle < -5 or x_angle > 5 else 0
 
                             direction = "Forward"
+                            looking_left = 0
+                            looking_right = 0
+                            looking_up = 0
+                            looking_down = 0
+                            phone_detected = phone_detection.PHONE_CHEAT
+                            multiple_faces = head_pose.MULTIPLE_FACE_CHEAT
                             if y_angle < -10:
                                 direction = "Looking Left"
+                                looking_left = 1
                             elif y_angle > 10:
                                 direction = "Looking Right"
+                                looking_right = 1
                             elif x_angle > 5:
                                 direction = "Looking Up"
+                                looking_up = 1
                             elif x_angle < -5:
                                 direction = "Looking Down"
+                                looking_down = 1
 
+                            # print(
+                            #     looking_left,
+                            #     looking_right,
+                            #     looking_up,
+                            #     looking_down,
+                            #     phone_detected,
+                            #     multiple_faces)
+                            
+                            event_logger.log_event(
+                                frame,
+                                looking_left,
+                                looking_right,
+                                looking_up,
+                                looking_down,
+                                phone_detected,
+                                multiple_faces
+                            )
+                            # print(direction)
                             cv2.putText(annotated_frame, f"Primary: {direction}", (10, 90),
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
             else:

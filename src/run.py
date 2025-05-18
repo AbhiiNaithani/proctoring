@@ -28,6 +28,7 @@ import combined_view
 import time
 from queue import Queue
 import graph
+import event_logger
 
 def main():
     # Camera setup
@@ -40,10 +41,13 @@ def main():
         print("Camera not accessible")
         return
 
+    
+    
     # Shared resources
     frame_queue = Queue(maxsize=1)
     stop_event = threading.Event()
 
+    event_logger.init_new_session()
     # Frame capture thread
     def frame_capture():
         while not stop_event.is_set():
@@ -54,12 +58,32 @@ def main():
                         frame_queue.get_nowait()  # Discard oldest frame if queue is full
                     except:
                         pass
+                # log_events(frame)
                 frame_queue.put(frame.copy())
             time.sleep(0.01)  # Small sleep to prevent CPU overload
 
+    def log_events(frame):
+        # Get current detection states
+        looking_left = head_pose.y < -10
+        looking_right = head_pose.y > 10
+        looking_up = head_pose.x > 5
+        looking_down = head_pose.x < -5
+        phone_detected = phone_detection.PHONE_CHEAT
+        multiple_faces = head_pose.MULTIPLE_FACE_CHEAT
+        
+        # Log the event
+        event_logger.log_event(
+            frame,
+            looking_left,
+            looking_right,
+            looking_up,
+            looking_down,
+            phone_detected,
+            multiple_faces
+        )
     # Start GUI-related function on main thread FIRST
-    detection_thread = threading.Thread(target=detection.run_detection,args=(stop_event,))
-    detection_thread.start()
+    # detection_thread = threading.Thread(target=detection.run_detection,args=(stop_event,))
+    # detection_thread.start()
 
     # Start all components
     threads = [
@@ -67,7 +91,7 @@ def main():
         threading.Thread(target=audio.sound, daemon=True),
         # threading.Thread(target=head_pose.pose, args=(frame_queue, stop_event), daemon=True),
         # threading.Thread(target=phone_detection.detect_phone, args=(frame_queue, stop_event), daemon=True),
-        threading.Thread(target=detection.run_detection, daemon=True),
+        threading.Thread(target=detection.run_detection,daemon=True),
         # threading.Thread(target=combined_view.process_combined_view, args=(frame_queue, stop_event), daemon=True),
         threading.Thread(target=graph.run_plot, args=(stop_event,), daemon=True)
     ]
@@ -79,6 +103,9 @@ def main():
     try:
         # while detection_thread.is_alive():
         #     time.sleep(0.5)
+        detection_thread = threading.Thread(target=detection.run_detection,args=(stop_event,))
+        detection_thread.start()
+
         combined_view.process_combined_view(frame_queue, stop_event)
     except KeyboardInterrupt:
         print("\nShutting down...")
